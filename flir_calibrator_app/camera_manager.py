@@ -31,6 +31,16 @@ class CameraManager:
         self.cam = self.cam_list.GetByIndex(0)
         self.cam.Init()
         
+        try:
+            # Configurar limite de banda USB (muito importante na Jetson Nano)
+            node_device_link = PySpin.CIntegerPtr(self.cam.GetNodeMap().GetNode('DeviceLinkThroughputLimit'))
+            if PySpin.IsAvailable(node_device_link) and PySpin.IsWritable(node_device_link):
+                # Limite conservador de 80 MB/s (80000000) por câmera para suportar 4 câmeras simultâneas no mesmo barramento
+                val = max(node_device_link.GetMin(), min(node_device_link.GetMax(), 80000000))
+                node_device_link.SetValue(val)
+        except Exception as e:
+            print("Aviso: Não foi possível definir o DeviceLinkThroughputLimit:", e)
+        
         return True, "Câmera conectada com sucesso."
 
     def start_stream(self):
@@ -91,8 +101,10 @@ class CameraManager:
             img_array = image_converted.GetNDArray()
             image_result.Release()
             return img_array
-        except PySpin.SpinnakerException as ex:
+        except Exception as ex:
             print(f"Erro ao capturar frame: {ex}")
+            if "[-1002]" in str(ex) or "removed from the list" in str(ex):
+                self.is_streaming = False
             return None
 
     # --- FUNÇÕES DE CONTROLE (Gain, Exposure, Gamma, Black Balance, White Balance) ---

@@ -171,6 +171,14 @@ class CalibratorGUI(QWidget):
         QMessageBox.information(self, "Padrão Atualizado", "As dimensões do ChArUco foram atualizadas.")
 
     def update_frame(self):
+        if not self.cam_manager.is_streaming:
+            self.timer.stop()
+            self.cam_manager.disconnect()
+            self.btn_connect.setText("Conectar Câmera")
+            self.video_label.clear()
+            self.video_label.setText("Câmera Desconectada (Erro)")
+            return
+
         frame = self.cam_manager.get_frame()
         if frame is not None:
             processed_frame, corners, ids = self.cal_manager.process_frame(frame)
