@@ -1,0 +1,11 @@
+# Dependências do Python
+# NOTA PARA JETSON NANO (Ubuntu 18.04 ARM64):
+# É fortemente recomendado instalar o PyQt5 e OpenCV usando o apt-get
+# para utilizar as versões compiladas e otimizadas para a placa:
+# sudo apt-get install python3-pyqt5 python3-opencv
+#
+# O pacote PySpin já está instalado na Jetson Nano conforme informado.
+
+numpy>=1.19.0
+# opencv-contrib-python>=4.5.0
+# PyQt5
