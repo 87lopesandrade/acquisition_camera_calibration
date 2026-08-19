@@ -21,6 +21,8 @@ class CalibrationManager:
         self.all_corners = []
         self.all_ids = []
         self.image_size = None
+        
+        self.line_y_ratio = 0.5  # Posição da linha vermelha (0.0 a 1.0)
 
     def update_board_params(self, square_length, marker_length):
         self.square_length = square_length
@@ -73,7 +75,18 @@ class CalibrationManager:
             if retval > 0:
                 cv2.aruco.drawDetectedCornersCharuco(display_frame, charuco_corners, charuco_ids, (0, 255, 0))
 
-        return display_frame, charuco_corners, charuco_ids
+        # --- Adicionar linha vermelha e extrair perfil ---
+        H, W = display_frame.shape[:2]
+        line_y = int(self.line_y_ratio * (H - 1))
+        
+        # Desenhar linha vermelha horizontal
+        cv2.line(display_frame, (0, line_y), (W, line_y), (0, 0, 255), 2)
+        
+        # Extrair perfil de intensidade
+        profile = gray[line_y, :]
+        # ------------------------------------------------
+
+        return display_frame, charuco_corners, charuco_ids, profile
 
     def add_capture(self, charuco_corners, charuco_ids):
         if charuco_corners is not None and charuco_ids is not None and len(charuco_corners) >= 4:

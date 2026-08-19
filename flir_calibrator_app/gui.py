@@ -2,10 +2,12 @@ import sys
 import os
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QGroupBox, QDoubleSpinBox, QFormLayout, 
-                             QMessageBox, QCheckBox, QFileDialog, QGridLayout, QGraphicsView, QGraphicsScene)
+                             QMessageBox, QCheckBox, QFileDialog, QGridLayout, 
+                             QGraphicsView, QGraphicsScene, QSlider)
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QImage, QPixmap, QPainter
 import cv2
+import numpy as np
 
 # Dicionário mapeando Seriais para nomes de interface
 CAMERA_NAMES = {
@@ -72,7 +74,7 @@ class CalibratorGUI(QWidget):
         self.calibration_results = {}
         
         self.setWindowTitle("FLIR Camera Calibrator - 4 Câmeras (ChArUco)")
-        self.resize(1200, 800)
+        self.resize(1400, 900)
         
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_frame)
@@ -115,19 +117,30 @@ class CalibratorGUI(QWidget):
         chk_wb_auto.stateChanged.connect(lambda state, g=group_name: self.cam_manager.set_white_balance_auto(g, state == Qt.Checked))
         form.addRow("White Balance:", chk_wb_auto)
 
+        slider_line_y = QSlider(Qt.Horizontal)
+        slider_line_y.setRange(0, 100)
+        slider_line_y.setValue(50)
+        slider_line_y.valueChanged.connect(lambda v, g=group_name: self.update_line_y(g, v))
+        form.addRow("Altura Linha Y (%):", slider_line_y)
+
         group.setLayout(form)
-        
-        return group, spin_exposure, spin_gain, spin_gamma, spin_black
+        return group, spin_exposure, spin_gain, spin_gamma, spin_black, slider_line_y
+
+    def update_line_y(self, group_name, value):
+        ratio = value / 100.0
+        serials = self.cam_manager.groups.get(group_name, [])
+        for serial in serials:
+            mgr = self.cal_managers.get(serial)
+            if mgr:
+                mgr.line_y_ratio = ratio
 
     def init_ui(self):
         main_layout = QHBoxLayout(self)
 
-        # Esquerda: Feed de Vídeo (Grade 2x2)
+        # Esquerda: Feed de Vídeo e Gráficos
         video_layout = QGridLayout()
         
         self.views = {}
-        # FPP_LEFT (0, 0), FPP_RIGHT (0, 1)
-        # DEFL_LEFT (1, 0), DEFL_RIGHT (1, 1)
         
         def add_view(serial, title, row, col):
             container = QVBoxLayout()
@@ -140,12 +153,31 @@ class CalibratorGUI(QWidget):
             video_layout.addLayout(container, row, col)
             self.views[serial] = view
 
+        # Linha 0: FPP Cameras
         add_view('19337756', 'FPP_LEFT (19337756)', 0, 0)
         add_view('19337638', 'FPP_RIGHT (19337638)', 0, 1)
-        add_view('22348163', 'DEFL_LEFT (22348163)', 1, 0)
-        add_view('22348161', 'DEFL_RIGHT (22348161)', 1, 1)
         
-        main_layout.addLayout(video_layout, stretch=3)
+        # Linha 1: Gráfico FPP
+        self.lbl_graph_fpp = QLabel("FPP Graph")
+        self.lbl_graph_fpp.setMinimumHeight(180)
+        self.lbl_graph_fpp.setMaximumHeight(220)
+        self.lbl_graph_fpp.setStyleSheet("background-color: black; border: 1px solid gray;")
+        self.lbl_graph_fpp.setScaledContents(True)
+        video_layout.addWidget(self.lbl_graph_fpp, 1, 0, 1, 2)
+        
+        # Linha 2: DEFL Cameras
+        add_view('22348163', 'DEFL_LEFT (22348163)', 2, 0)
+        add_view('22348161', 'DEFL_RIGHT (22348161)', 2, 1)
+        
+        # Linha 3: Gráfico DEFL
+        self.lbl_graph_defl = QLabel("DEFL Graph")
+        self.lbl_graph_defl.setMinimumHeight(180)
+        self.lbl_graph_defl.setMaximumHeight(220)
+        self.lbl_graph_defl.setStyleSheet("background-color: black; border: 1px solid gray;")
+        self.lbl_graph_defl.setScaledContents(True)
+        video_layout.addWidget(self.lbl_graph_defl, 3, 0, 1, 2)
+        
+        main_layout.addLayout(video_layout, stretch=4)
 
         # Direita: Controles
         control_layout = QVBoxLayout()
@@ -155,18 +187,17 @@ class CalibratorGUI(QWidget):
         control_layout.addWidget(self.btn_connect)
 
         # Controles FPP
-        fpp_group, self.fpp_exp, self.fpp_gain, self.fpp_gamma, self.fpp_black = self.create_camera_controls('FPP')
+        fpp_group, self.fpp_exp, self.fpp_gain, self.fpp_gamma, self.fpp_black, _ = self.create_camera_controls('FPP')
         control_layout.addWidget(fpp_group)
 
         # Controles DEFL
-        defl_group, self.defl_exp, self.defl_gain, self.defl_gamma, self.defl_black = self.create_camera_controls('DEFL')
+        defl_group, self.defl_exp, self.defl_gain, self.defl_gamma, self.defl_black, _ = self.create_camera_controls('DEFL')
         control_layout.addWidget(defl_group)
 
         # Configurações do Padrão ChArUco
         charuco_group = QGroupBox("Padrão ChArUco")
         charuco_form = QFormLayout()
 
-        # Pega de um gerenciador qualquer
         first_manager = list(self.cal_managers.values())[0]
 
         self.spin_sq_len = QDoubleSpinBox()
@@ -224,13 +255,11 @@ class CalibratorGUI(QWidget):
         if not self.cam_manager.is_streaming:
             success, msg = self.cam_manager.connect()
             if success:
-                # Set initial values for FPP
                 self.cam_manager.set_exposure('FPP', self.fpp_exp.value())
                 self.cam_manager.set_gain('FPP', self.fpp_gain.value())
                 self.cam_manager.set_gamma('FPP', self.fpp_gamma.value())
                 self.cam_manager.set_black_level('FPP', self.fpp_black.value())
                 
-                # Set initial values for DEFL
                 self.cam_manager.set_exposure('DEFL', self.defl_exp.value())
                 self.cam_manager.set_gain('DEFL', self.defl_gain.value())
                 self.cam_manager.set_gamma('DEFL', self.defl_gamma.value())
@@ -247,6 +276,8 @@ class CalibratorGUI(QWidget):
             self.btn_connect.setText("Conectar Câmeras")
             for view in self.views.values():
                 view.clear()
+            self.lbl_graph_fpp.clear()
+            self.lbl_graph_defl.clear()
 
     def update_board(self):
         sq = self.spin_sq_len.value()
@@ -255,6 +286,70 @@ class CalibratorGUI(QWidget):
             mgr.update_board_params(sq, mk)
         QMessageBox.information(self, "Padrão Atualizado", "Dimensões do ChArUco atualizadas em todas as câmeras.")
 
+    def create_graph_image(self, profile_left, profile_right):
+        img_width = 1200
+        img_height = 240
+        margin_left = 60
+        margin_bottom = 40
+        margin_top = 25
+        margin_right = 20
+        
+        plot_width = img_width - margin_left - margin_right
+        plot_height = img_height - margin_bottom - margin_top
+        
+        graph_img = np.zeros((img_height, img_width, 3), dtype=np.uint8)
+        # Preencher o fundo da área do gráfico de verde escuro
+        cv2.rectangle(graph_img, (margin_left, margin_top), (margin_left + plot_width, margin_top + plot_height), (0, 25, 0), -1)
+        
+        # Borda
+        cv2.rectangle(graph_img, (margin_left, margin_top), (margin_left + plot_width, margin_top + plot_height), (100, 100, 100), 1)
+        
+        # Eixo Y (Intensidade)
+        num_y_ticks = 6
+        for i in range(num_y_ticks):
+            val = int(255 * i / (num_y_ticks - 1))
+            y = margin_top + plot_height - int(plot_height * val / 255.0)
+            cv2.line(graph_img, (margin_left, y), (margin_left + plot_width, y), (0, 50, 0), 1)
+            cv2.putText(graph_img, str(val), (margin_left - 35, y + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+            
+        # Determinar max_pixels do eixo X
+        max_pixels = 1600
+        if profile_left is not None:
+            max_pixels = len(profile_left)
+        elif profile_right is not None:
+            max_pixels = len(profile_right)
+            
+        # Eixo X (Nº pixel)
+        num_x_ticks = 17 
+        for i in range(num_x_ticks):
+            x = margin_left + int(plot_width * i / (num_x_ticks - 1))
+            cv2.line(graph_img, (x, margin_top), (x, margin_top + plot_height), (0, 50, 0), 1)
+            val_x = int(max_pixels * i / (num_x_ticks - 1))
+            cv2.putText(graph_img, str(val_x), (x - 15, margin_top + plot_height + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+            
+        # Título e Labels
+        cv2.putText(graph_img, "Intensity vs Pixel", (10, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(graph_img, "Pixel's Intensity", (10, margin_top - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        cv2.putText(graph_img, "N. pixel", (margin_left + plot_width // 2 - 30, margin_top + plot_height + 35), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+            
+        def draw_profile(profile, color):
+            if profile is not None:
+                x_old = np.linspace(0, plot_width - 1, len(profile))
+                x_new = np.arange(plot_width)
+                profile_resized = np.interp(x_new, x_old, profile)
+                
+                y_plot = margin_top + plot_height - 1 - (profile_resized * (plot_height - 1) / 255.0)
+                x_plot = margin_left + x_new
+                
+                pts = np.column_stack((x_plot, y_plot)).astype(np.int32).reshape((-1, 1, 2))
+                cv2.polylines(graph_img, [pts], isClosed=False, color=color, thickness=1)
+
+        # OpenCV BGR -> Branco (Esq) e Vermelho (Dir)
+        draw_profile(profile_left, (255, 255, 255))
+        draw_profile(profile_right, (0, 0, 255))
+        
+        return graph_img
+
     def update_frame(self):
         if not self.cam_manager.is_streaming:
             self.timer.stop()
@@ -262,11 +357,18 @@ class CalibratorGUI(QWidget):
             self.btn_connect.setText("Conectar Câmeras")
             for view in self.views.values():
                 view.clear()
+            self.lbl_graph_fpp.clear()
+            self.lbl_graph_defl.clear()
             return
 
         frames = self.cam_manager.get_frames()
         if not frames:
             return
+            
+        profiles = {
+            'FPP': {'LEFT': None, 'RIGHT': None},
+            'DEFL': {'LEFT': None, 'RIGHT': None}
+        }
             
         for serial, frame in frames.items():
             if frame is None or serial not in self.views:
@@ -274,8 +376,13 @@ class CalibratorGUI(QWidget):
                 
             mgr = self.cal_managers.get(serial)
             if mgr:
-                processed_frame, corners, ids = mgr.process_frame(frame)
+                processed_frame, corners, ids, profile = mgr.process_frame(frame)
                 self.last_charuco_data[serial] = (corners, ids)
+                
+                if serial == '19337756': profiles['FPP']['LEFT'] = profile
+                elif serial == '19337638': profiles['FPP']['RIGHT'] = profile
+                elif serial == '22348163': profiles['DEFL']['LEFT'] = profile
+                elif serial == '22348161': profiles['DEFL']['RIGHT'] = profile
                 
                 rgb_image = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgb_image.shape
@@ -283,6 +390,19 @@ class CalibratorGUI(QWidget):
                 q_img = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
                 
                 self.views[serial].set_image(q_img)
+
+        # Atualiza o gráfico FPP
+        img_fpp = self.create_graph_image(profiles['FPP']['LEFT'], profiles['FPP']['RIGHT'])
+        # QImage usa RGB, mas o numpy array está em BGR (gerado pelo cv2), então usamos cvtColor
+        img_fpp_rgb = cv2.cvtColor(img_fpp, cv2.COLOR_BGR2RGB)
+        q_img_fpp = QImage(img_fpp_rgb.data, img_fpp_rgb.shape[1], img_fpp_rgb.shape[0], img_fpp_rgb.shape[1]*3, QImage.Format_RGB888)
+        self.lbl_graph_fpp.setPixmap(QPixmap.fromImage(q_img_fpp))
+        
+        # Atualiza o gráfico DEFL
+        img_defl = self.create_graph_image(profiles['DEFL']['LEFT'], profiles['DEFL']['RIGHT'])
+        img_defl_rgb = cv2.cvtColor(img_defl, cv2.COLOR_BGR2RGB)
+        q_img_defl = QImage(img_defl_rgb.data, img_defl_rgb.shape[1], img_defl_rgb.shape[0], img_defl_rgb.shape[1]*3, QImage.Format_RGB888)
+        self.lbl_graph_defl.setPixmap(QPixmap.fromImage(q_img_defl))
 
     def capture_pose(self):
         captured_any = False
@@ -294,7 +414,6 @@ class CalibratorGUI(QWidget):
                     captured_any = True
                     
         if captured_any:
-            # Mostrar a contagem máxima capturada entre todas as câmeras
             max_count = max([len(mgr.all_corners) for mgr in self.cal_managers.values()])
             self.lbl_poses.setText(f"Poses capturadas: {max_count}")
         else:
