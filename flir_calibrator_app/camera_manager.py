@@ -50,15 +50,23 @@ class CameraManager:
 
     def stop_stream(self):
         if self.cam and self.is_streaming:
-            self.cam.EndAcquisition()
-            self.is_streaming = False
+            try:
+                self.cam.EndAcquisition()
+            except Exception as ex:
+                print(f"Erro ao parar aquisição: {ex}")
+            finally:
+                self.is_streaming = False
 
     def disconnect(self):
         self.stop_stream()
         if self.cam:
-            self.cam.DeInit()
-            del self.cam
-            self.cam = None
+            try:
+                self.cam.DeInit()
+            except Exception as ex:
+                print(f"Erro ao desinicializar a câmera: {ex}")
+            finally:
+                del self.cam
+                self.cam = None
         if self.cam_list:
             self.cam_list.Clear()
             self.cam_list = None

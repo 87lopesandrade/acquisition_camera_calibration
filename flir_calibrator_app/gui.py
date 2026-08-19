@@ -142,15 +142,15 @@ class CalibratorGUI(QWidget):
         if not self.cam_manager.is_streaming:
             success, msg = self.cam_manager.connect()
             if success:
-                self.cam_manager.start_stream()
-                self.timer.start(30) # ~33 FPS
-                self.btn_connect.setText("Desconectar Câmera")
-                
-                # Seta os valores iniciais na camera
+                # Seta os valores iniciais na camera antes de iniciar o stream
                 self.cam_manager.set_exposure(self.spin_exposure.value())
                 self.cam_manager.set_gain(self.spin_gain.value())
                 self.cam_manager.set_gamma(self.spin_gamma.value())
                 self.cam_manager.set_black_level(self.spin_black.value())
+                
+                self.cam_manager.start_stream()
+                self.timer.start(30) # ~33 FPS
+                self.btn_connect.setText("Desconectar Câmera")
             else:
                 QMessageBox.critical(self, "Erro", msg)
         else:
