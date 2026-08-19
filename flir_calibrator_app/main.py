@@ -9,10 +9,9 @@ def main():
     
     # Inicializa os managers
     cam_manager = CameraManager()
-    cal_manager = CalibrationManager()
     
-    # Inicializa e exibe a interface
-    gui = CalibratorGUI(cam_manager, cal_manager)
+    # Inicializa e exibe a interface passando a CLASSE do CalibrationManager
+    gui = CalibratorGUI(cam_manager, CalibrationManager)
     gui.show()
     
     sys.exit(app.exec_())
