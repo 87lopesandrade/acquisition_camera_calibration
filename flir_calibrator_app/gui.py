@@ -289,10 +289,10 @@ class CalibratorGUI(QWidget):
     def create_graph_image(self, profile_left, profile_right):
         img_width = 1200
         img_height = 240
-        margin_left = 60
-        margin_bottom = 40
-        margin_top = 25
-        margin_right = 20
+        margin_left = 70
+        margin_bottom = 50
+        margin_top = 30
+        margin_right = 30
         
         plot_width = img_width - margin_left - margin_right
         plot_height = img_height - margin_bottom - margin_top
@@ -310,7 +310,8 @@ class CalibratorGUI(QWidget):
             val = int(255 * i / (num_y_ticks - 1))
             y = margin_top + plot_height - int(plot_height * val / 255.0)
             cv2.line(graph_img, (margin_left, y), (margin_left + plot_width, y), (0, 50, 0), 1)
-            cv2.putText(graph_img, str(val), (margin_left - 35, y + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+            text_size = cv2.getTextSize(str(val), cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
+            cv2.putText(graph_img, str(val), (margin_left - text_size[0] - 10, y + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
             
         # Determinar max_pixels do eixo X
         max_pixels = 1600
@@ -320,17 +321,18 @@ class CalibratorGUI(QWidget):
             max_pixels = len(profile_right)
             
         # Eixo X (Nº pixel)
-        num_x_ticks = 17 
+        num_x_ticks = 9
         for i in range(num_x_ticks):
             x = margin_left + int(plot_width * i / (num_x_ticks - 1))
             cv2.line(graph_img, (x, margin_top), (x, margin_top + plot_height), (0, 50, 0), 1)
             val_x = int(max_pixels * i / (num_x_ticks - 1))
-            cv2.putText(graph_img, str(val_x), (x - 15, margin_top + plot_height + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+            text_size = cv2.getTextSize(str(val_x), cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
+            cv2.putText(graph_img, str(val_x), (x - text_size[0]//2, margin_top + plot_height + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
             
         # Título e Labels
-        cv2.putText(graph_img, "Intensity vs Pixel", (10, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(graph_img, "Pixel's Intensity", (10, margin_top - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-        cv2.putText(graph_img, "N. pixel", (margin_left + plot_width // 2 - 30, margin_top + plot_height + 35), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        cv2.putText(graph_img, "Intensidade vs Pixel", (10, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(graph_img, "Intensidade", (5, margin_top - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        cv2.putText(graph_img, "Numero do Pixel", (margin_left + plot_width // 2 - 40, margin_top + plot_height + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
             
         def draw_profile(profile, color):
             if profile is not None:

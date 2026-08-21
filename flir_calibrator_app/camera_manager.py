@@ -15,6 +15,7 @@ class CameraManager:
         # Dicionário de câmeras conectadas: { "serial": cam_obj }
         self.cams = {}
         self.is_streaming = False
+        self.processor = None
         
         # Mapeamento de grupos para facilitar o controle
         self.groups = {
@@ -28,6 +29,10 @@ class CameraManager:
 
         self.system = PySpin.System.GetInstance()
         self.cam_list = self.system.GetCameras()
+        
+        if self.processor is None:
+            self.processor = PySpin.ImageProcessor()
+            self.processor.SetColorProcessing(PySpin.SPINNAKER_COLOR_PROCESSING_ALGORITHM_HQ_LINEAR)
         
         num_cameras = self.cam_list.GetSize()
         if num_cameras == 0:
@@ -55,8 +60,16 @@ class CameraManager:
                 # Configurar limite de banda USB (muito importante na Jetson Nano para 4 câmeras)
                 node_device_link = PySpin.CIntegerPtr(cam.GetNodeMap().GetNode('DeviceLinkThroughputLimit'))
                 if PySpin.IsAvailable(node_device_link) and PySpin.IsWritable(node_device_link):
-                    # Limite conservador de 80 MB/s (80000000) por câmera
-                    val = max(node_device_link.GetMin(), min(node_device_link.GetMax(), 80000000))
+                    min_val = node_device_link.GetMin()
+                    max_val = node_device_link.GetMax()
+                    try:
+                        inc = node_device_link.GetInc()
+                    except:
+                        inc = 1
+                    target = 80000000
+                    if inc > 1:
+                        target = min_val + ((target - min_val) // inc) * inc
+                    val = max(min_val, min(max_val, target))
                     node_device_link.SetValue(val)
             except Exception as e:
                 print(f"Aviso: Não foi possível definir o DeviceLinkThroughputLimit na câmera {serial}: {e}")
@@ -98,6 +111,10 @@ class CameraManager:
                 print(f"Erro ao desinicializar a câmera {serial}: {ex}")
         self.cams.clear()
         
+        if self.processor is not None:
+            del self.processor
+            self.processor = None
+            
         if self.cam_list:
             self.cam_list.Clear()
             self.cam_list = None
@@ -112,22 +129,34 @@ class CameraManager:
         
         frames = {}
         for serial, cam in self.cams.items():
+            image_result = None
             try:
                 image_result = cam.GetNextImage(1000)
                 if image_result.IsIncomplete():
-                    image_result.Release()
                     frames[serial] = None
                     continue
 
-                image_converted = image_result.Convert(PySpin.PixelFormat_BGR8, PySpin.HQ_LINEAR)
-                img_array = image_converted.GetNDArray()
-                image_result.Release()
+                if hasattr(image_result, 'Convert'):
+                    image_converted = image_result.Convert(PySpin.PixelFormat_BGR8, PySpin.HQ_LINEAR)
+                else:
+                    image_converted = self.processor.Convert(image_result, PySpin.PixelFormat_BGR8)
+                
+                img_array = image_converted.GetNDArray().copy()
                 frames[serial] = img_array
             except Exception as ex:
                 print(f"Erro ao capturar frame da câmera {serial}: {ex}")
                 if "[-1002]" in str(ex) or "removed from the list" in str(ex):
                     self.is_streaming = False
                 frames[serial] = None
+            finally:
+                if 'image_converted' in locals():
+                    del image_converted
+                if image_result is not None:
+                    try:
+                        image_result.Release()
+                    except:
+                        pass
+                    del image_result
                 
         return frames
 
