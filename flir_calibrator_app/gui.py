@@ -201,22 +201,22 @@ class CalibratorGUI(QWidget):
         first_manager = list(self.cal_managers.values())[0]
 
         self.spin_sq_len = QDoubleSpinBox()
-        self.spin_sq_len.setDecimals(3)
-        self.spin_sq_len.setRange(0.001, 1.000)
+        self.spin_sq_len.setDecimals(1)
+        self.spin_sq_len.setRange(1.0, 1000.0)
         self.spin_sq_len.setValue(first_manager.square_length)
-        self.spin_sq_len.setSingleStep(0.001)
+        self.spin_sq_len.setSingleStep(1.0)
 
         self.spin_mk_len = QDoubleSpinBox()
-        self.spin_mk_len.setDecimals(3)
-        self.spin_mk_len.setRange(0.001, 1.000)
+        self.spin_mk_len.setDecimals(1)
+        self.spin_mk_len.setRange(1.0, 1000.0)
         self.spin_mk_len.setValue(first_manager.marker_length)
-        self.spin_mk_len.setSingleStep(0.001)
+        self.spin_mk_len.setSingleStep(1.0)
 
         self.btn_update_board = QPushButton("Atualizar Padrão")
         self.btn_update_board.clicked.connect(self.update_board)
 
-        charuco_form.addRow("Square Length (m):", self.spin_sq_len)
-        charuco_form.addRow("Marker Length (m):", self.spin_mk_len)
+        charuco_form.addRow("Square Length (mm):", self.spin_sq_len)
+        charuco_form.addRow("Marker Length (mm):", self.spin_mk_len)
         charuco_form.addRow(self.btn_update_board)
         charuco_group.setLayout(charuco_form)
         control_layout.addWidget(charuco_group)

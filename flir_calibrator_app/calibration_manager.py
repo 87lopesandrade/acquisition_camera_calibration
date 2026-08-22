@@ -8,8 +8,8 @@ class CalibrationManager:
         # Parametros padrão do tabuleiro informados
         self.squares_x = 11
         self.squares_y = 8
-        self.square_length = 0.030  # 30 mm (valor padrão, deve ser alterado via UI)
-        self.marker_length = 0.023  # ~75% de 30mm (valor padrão)
+        self.square_length = 30.0  # 30 mm (valor padrão, deve ser alterado via UI)
+        self.marker_length = 23.0  # 23 mm (valor padrão)
         
         # O dicionário informado é o 5X5. Vamos usar o de 50.
         self.dictionary = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_50) if hasattr(cv2.aruco, 'Dictionary_get') else cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_50)
